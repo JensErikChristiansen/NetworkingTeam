@@ -15,7 +15,7 @@ namespace WDServer
         // Set this to false for Release builds so we aren't wasting cycles by printing to the console
         public static bool DEBUG = true;
 
-        private int _port = 4568;
+        private int _port = 25001;
         public static int CLIENT_TIMEOUT = 15; // Seconds
 
         private Socket socket = null;
@@ -83,7 +83,7 @@ namespace WDServer
                     IPEndPoint ipEndPoint = new IPEndPoint(ip, _port);
                     EndPoint remoteEndPoint = (ipEndPoint);
                     int bytesReceived = socket.ReceiveFrom(received, ref remoteEndPoint);
-                    string dataReceived = Encoding.ASCII.GetString(received);
+                    string dataReceived = Encoding.ASCII.GetString(received).TrimEnd('\0');
                     string ipAddress = ipEndPoint.Address.ToString();
 
                     // Debug
@@ -93,23 +93,27 @@ namespace WDServer
                     // Parse command and arguments
                     Instruction instruction = (Instruction)JsonConvert.DeserializeObject(dataReceived);
 
-                    User user;
+                    // Reset the user's timeout counter
+                    ResetUserTimeout(ipAddress);
+
+                    // Parse instruction
                     switch (instruction.Command)
                     {
                         case "J": // JOIN
-                            user = new User(remoteEndPoint);
-                            _users.TryAdd(ipAddress, user);
-                            // JoinMatch(user); TODO JOIN USER'S MATCH
+                            OnJoin(remoteEndPoint, ipAddress, instruction);
                             break;
 
-                        case "H": // HEARTBEAT (resets client timeout)
-                            _users.TryGetValue(ipAddress, out user);
-                            user?.ResetTimeout();
+                        case "M": // MESSAGE (general command)
+                            OnMessage(ipAddress, instruction);
                             break;
 
-                        case "M": // MESSAGE (general command for everything else)
-                            _users.TryGetValue(ipAddress, out user);
-                            SendToMatch(user, instruction);
+                        default:
+                            if (DEBUG)
+                            {
+                                // Just echo back (for testing)
+                                byte[] returningByte = Encoding.ASCII.GetBytes(dataReceived);
+                                socket.SendTo(returningByte, remoteEndPoint);
+                            }
                             break;
                     }
                 }
@@ -120,6 +124,35 @@ namespace WDServer
             }
         }
 
+        private void OnJoin(EndPoint remoteEndPoint, string ipAddress, Instruction instruction)
+        {
+            User user;
+            user = new User(remoteEndPoint);
+            _users.TryAdd(ipAddress, user);
+            FindMatch(user, instruction.Arg1);
+        }
+
+        private void FindMatch(User user, string matchId)
+        {
+            // Assign user to match based on matchId
+
+        }
+
+        private void ResetUserTimeout(string ipAddress)
+        {
+            User user;
+            _users.TryGetValue(ipAddress, out user);
+            user?.ResetTimeout();
+        }
+
+        private void OnMessage(string ipAddress, Instruction instruction)
+        {
+            User user;
+            _users.TryGetValue(ipAddress, out user);
+            if (user == null) return;
+            SendToMatch(user, instruction);
+        }
+
         /// <summary>
         /// Sends to all users in a match
         /// </summary>
@@ -127,14 +160,17 @@ namespace WDServer
         /// <param name="instruction"></param>
         private void SendToMatch(User user, Instruction instruction)
         {
+            byte[] returningByte = Encoding.ASCII.GetBytes("HELLO");
+            socket.SendTo(returningByte, user.EndPoint);
+
             // TODO
             // Find match
             // Send instruction to everyone in match
 
             foreach (KeyValuePair<string, User> u in _users) // This needs to be users in a match instead
             {
-                byte[] returningByte = Encoding.ASCII.GetBytes(instruction.ToString().ToCharArray()); // Is ToCharArray necessary here?
-                socket.SendTo(returningByte, u.Value.EndPoint);
+                //byte[] returningByte = Encoding.ASCII.GetBytes(instruction.ToString().ToCharArray()); // Is ToCharArray necessary here?
+                //socket.SendTo(returningByte, u.Value.EndPoint);
             }
         }
 
