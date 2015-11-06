@@ -2,8 +2,10 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading;
 using WindowsDefender_WebApp;
@@ -26,6 +28,8 @@ namespace WDServer
         private ConcurrentDictionary<string, Match> _matches = new ConcurrentDictionary<string, Match>();
 
         private Thread _checkForTimeouts;
+
+        public enum InstructionType { JOIN, CMD };
 
         /// <summary>
         /// Entry point
@@ -99,12 +103,12 @@ namespace WDServer
                     // Parse instruction
                     switch (instruction.Command)
                     {
-                        case "J": // JOIN
+                        case InstructionType.JOIN:
                             OnJoin(remoteEndPoint, ipAddress, instruction);
                             break;
 
-                        case "M": // MESSAGE (general command)
-                            OnMessage(ipAddress, instruction);
+                        case InstructionType.CMD:
+                            OnCommand(ipAddress, instruction);
                             break;
 
                         default:
@@ -128,14 +132,23 @@ namespace WDServer
         {
             User user;
             user = new User(remoteEndPoint);
+
+            // Set username
+            user.Username = instruction.Arg1;
+
+            // Set match id
+            user.MatchId = instruction.Arg2;
+
+            // Add user
             _users.TryAdd(ipAddress, user);
-            FindMatch(user, instruction.Arg1);
+
+            // Find the user's match and add him/her to it
+            FindMatch(user);
         }
 
-        private void FindMatch(User user, string matchId)
+        private void FindMatch(User user)
         {
-            // Assign user to match based on matchId
-
+            // TODO
         }
 
         private void ResetUserTimeout(string ipAddress)
@@ -145,11 +158,15 @@ namespace WDServer
             user?.ResetTimeout();
         }
 
-        private void OnMessage(string ipAddress, Instruction instruction)
+        private void OnCommand(string ipAddress, Instruction instruction)
         {
             User user;
-            _users.TryGetValue(ipAddress, out user);
-            if (user == null) return;
+
+            if (!_users.TryGetValue(ipAddress, out user))
+            {
+                return;
+            }
+
             SendToMatch(user, instruction);
         }
 
@@ -160,8 +177,8 @@ namespace WDServer
         /// <param name="instruction"></param>
         private void SendToMatch(User user, Instruction instruction)
         {
-            byte[] returningByte = Encoding.ASCII.GetBytes("HELLO");
-            socket.SendTo(returningByte, user.EndPoint);
+            byte[] bytes = ObjectToByteArray(instruction);
+            socket.SendTo(bytes, user.EndPoint);
 
             // TODO
             // Find match
@@ -171,6 +188,22 @@ namespace WDServer
             {
                 //byte[] returningByte = Encoding.ASCII.GetBytes(instruction.ToString().ToCharArray()); // Is ToCharArray necessary here?
                 //socket.SendTo(returningByte, u.Value.EndPoint);
+            }
+        }
+
+        /// <summary>
+        /// Taken from
+        /// https://stackoverflow.com/questions/1446547/how-to-convert-an-object-to-a-byte-array-in-c-sharp
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <returns></returns>
+        public static byte[] ObjectToByteArray(object obj)
+        {
+            BinaryFormatter bf = new BinaryFormatter();
+            using (var ms = new MemoryStream())
+            {
+                bf.Serialize(ms, obj);
+                return ms.ToArray();
             }
         }
 

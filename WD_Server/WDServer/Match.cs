@@ -20,7 +20,7 @@ namespace WindowsDefender_WebApp
         /// </summary>
         public Match()
         {
-            Id = Guid.NewGuid().ToString();
+
         }
 
         /// <summary>
