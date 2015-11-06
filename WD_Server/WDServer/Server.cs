@@ -244,6 +244,10 @@ namespace WDServer
         /// <param name="ipaddress"></param>
         private void DisconnectUser(string ipaddress)
         {
+            // Remove user from match
+            //todo
+
+            // Remove user
             User dummy;
             _users.TryRemove(ipaddress, out dummy);
             // TODO - CHECK IF USER WAS LAST PERSON IN HIS/HER MATCH. IF SO, REMOVE THE MATCH FROM _matches
